@@ -1,0 +1,45 @@
+name: post-build-scan
+description: Trivy image scan (CRITICAL gate) + CycloneDX SBOM, or Trivy fs on a build output folder
+inputs:
+  scan-type: {description: "image or fs", default: image}
+  target:    {description: "image ref or folder", required: true}
+  severity:  {description: severities that fail the gate, default: CRITICAL}
+runs:
+  using: composite
+  steps:
+    - name: Generate SBOM (CycloneDX)
+      if: inputs.scan-type == 'image'
+      uses: aquasecurity/trivy-action@v0.36.0   # TODO pin SHA
+      with:
+        scan-type: image
+        image-ref: ${{ inputs.target }}
+        format: cyclonedx
+        output: sbom.cdx.json
+
+    - name: Trivy gate
+      uses: aquasecurity/trivy-action@v0.36.0   # TODO pin SHA
+      with:
+        scan-type: ${{ inputs.scan-type }}
+        image-ref: ${{ inputs.scan-type == 'image' && inputs.target || '' }}
+        scan-ref: ${{ inputs.scan-type == 'fs' && inputs.target || '' }}
+        scanners: vuln,secret
+        severity: ${{ inputs.severity }}
+        ignore-unfixed: true
+        exit-code: "1"
+        format: table
+        output: trivy-post-report.txt
+
+    - name: Show report
+      if: always()
+      shell: bash
+      run: cat trivy-post-report.txt 2>/dev/null || true
+
+    - name: Upload reports
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: post-build-scan-${{ github.job }}
+        path: |
+          trivy-post-report.txt
+          sbom.cdx.json
+        if-no-files-found: ignore

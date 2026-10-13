@@ -1,0 +1,12 @@
+# minikube: plain Secret, default StorageClass, image loaded with `minikube image load`, no ALB
+backend:
+  image:
+    repository: taskboard-backend
+    tag: local
+    pullPolicy: Never
+  replicas: 1
+  environment: local
+secret:
+  mode: plain
+targetGroupBinding:
+  enabled: false

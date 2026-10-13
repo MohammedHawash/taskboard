@@ -1,0 +1,37 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ .Release.Name }}-test-api
+  labels:
+    {{- include "taskboard.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 10001
+    seccompProfile: {type: RuntimeDefault}
+  containers:
+    - name: api-test
+      image: "{{ .Values.backend.image.repository }}:{{ .Values.backend.image.tag }}"
+      imagePullPolicy: {{ .Values.backend.image.pullPolicy }}
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities: {drop: ["ALL"]}
+      command:
+        - python
+        - -c
+        - |
+          import json, urllib.request as u
+          base = "http://{{ include "taskboard.backendName" . }}:{{ .Values.backend.port }}"
+          hdr = {"Content-Type": "application/json"}
+          # NOTE: adjust the payload to the real schema (see /api/docs)
+          req = u.Request(base + "/api/tasks", data=json.dumps({"title": "helm-test"}).encode(), headers=hdr, method="POST")
+          created = json.load(u.urlopen(req))
+          tasks = json.load(u.urlopen(base + "/api/tasks"))
+          assert any(t["id"] == created["id"] for t in tasks), "created task not found"
+          u.urlopen(u.Request(base + "/api/tasks/%s" % created["id"], method="DELETE"))
+          print("helm test OK:", created)

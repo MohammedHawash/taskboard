@@ -1,0 +1,38 @@
+backend:
+  image:
+    repository: taskboard-backend
+    tag: local
+    pullPolicy: IfNotPresent
+  replicas: 1
+  environment: local
+  port: 8000
+  resources:
+    requests: {cpu: 100m, memory: 128Mi}
+    limits: {memory: 256Mi}
+
+postgres:
+  image: postgres:17-alpine
+  db: taskboard
+  user: taskboard
+  uid: 70                 # "postgres" user in the alpine image
+  storage:
+    size: 1Gi
+    storageClass: ""      # "" = cluster default StorageClass
+  resources:
+    requests: {cpu: 100m, memory: 256Mi}
+    limits: {memory: 512Mi}
+
+# Credentials: "plain" (local only) or "external" (ExternalSecret -> AWS Secrets Manager)
+secret:
+  mode: plain
+  plain:
+    password: local-dev-password
+  external:
+    region: eu-west-1
+    remoteKey: taskboard-prod/db-password   # Secrets Manager secret name
+    property: password                      # JSON key inside the secret
+
+# Registers backend pods in an ALB target group (Terraform owns the ALB)
+targetGroupBinding:
+  enabled: false
+  targetGroupArn: ""

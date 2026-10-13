@@ -1,0 +1,62 @@
+name: Backend
+on:
+  pull_request:          # no paths filter: required checks must always exist
+  push:
+    branches: [main]
+    paths: ["app/backend/**", ".github/**"]
+permissions:
+  contents: read
+  id-token: write        # OIDC
+concurrency:
+  group: backend-${{ github.ref }}
+  cancel-in-progress: true
+env:
+  AWS_REGION: ${{ vars.AWS_REGION }}
+jobs:
+  test:
+    name: Backend lint & tests
+    runs-on: ubuntu-latest
+    defaults: {run: {working-directory: app/backend}}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.13", cache: pip}
+      - run: pip install -r requirements.txt -r requirements-dev.txt
+      - run: ruff check . || python -m ruff check .
+      - run: python -m pytest --cov=taskboard --cov-report=xml --cov-report=term
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: {name: backend-coverage, path: app/backend/coverage.xml, if-no-files-found: ignore}
+
+  build-scan-push:
+    name: Scan, build, push
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - uses: ./.github/actions/pre-build-scan
+        with:
+          scan-path: app/backend
+          sonar-token: ${{ secrets.SONAR_TOKEN }}
+          sonar-host-url: ${{ vars.SONAR_HOST_URL }}
+          sonar-organization: ${{ vars.SONAR_ORGANIZATION }}
+          sonar-project-key: ${{ vars.SONAR_ORGANIZATION }}_taskboard-backend
+          sonar-sources: app/backend
+      - name: Build image
+        run: docker build --pull --build-arg APP_VERSION=sha-${{ github.sha }} -t taskboard-backend:ci app/backend
+      - uses: ./.github/actions/post-build-scan
+        with: {scan-type: image, target: taskboard-backend:ci, severity: CRITICAL}
+      - name: Login to AWS (OIDC)
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - name: Push sha tag to ECR
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: |
+          REGISTRY="${{ vars.ECR_REPOSITORY_URL }}"
+          aws ecr get-login-password | docker login --username AWS --password-stdin "${REGISTRY%%/*}"
+          docker tag taskboard-backend:ci "$REGISTRY:sha-${{ github.sha }}"
+          docker push "$REGISTRY:sha-${{ github.sha }}"

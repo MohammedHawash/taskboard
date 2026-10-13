@@ -1,0 +1,13 @@
+node_modules/
+.next/
+out/
+__pycache__/
+.venv/
+*.tfstate
+*.tfstate.*
+.terraform/
+terraform.tfvars
+*.auto.tfvars
+.env
+sbom.cdx.json
+trivy-*.txt

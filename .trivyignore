@@ -1,0 +1,18 @@
+# Accepted risks - every entry needs a written reason. Re-check IDs after the first scan.
+# CloudFront -> ALB uses HTTP: no custom domain/ACM cert in this lab (stretch goal). ALB only accepts CloudFront IPs + secret header.
+AVD-AWS-0054
+# ALB is internet-facing by design (restricted to CloudFront prefix list); VPC origins is a stretch goal.
+AVD-AWS-0053
+# ECR / S3 / Secrets Manager use AWS-managed keys instead of customer-managed KMS (cost/complexity for a lab).
+AVD-AWS-0033
+AVD-AWS-0132
+AVD-AWS-0098
+# CloudFront: no WAF, no access logs, default *.cloudfront.net certificate (TLS 1.0 min on default cert).
+AVD-AWS-0011
+AVD-AWS-0010
+AVD-AWS-0013
+# S3 access logging not enabled for the lab bucket.
+AVD-AWS-0089
+# EKS public API endpoint so GitHub runners / laptop can reach it (lab, no VPN).
+AVD-AWS-0040
+AVD-AWS-0041

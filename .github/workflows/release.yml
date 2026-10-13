@@ -1,0 +1,73 @@
+name: Release
+on:
+  release:
+    types: [published]
+permissions:
+  contents: read
+  id-token: write
+env:
+  TAG: ${{ github.event.release.tag_name }}
+  IMAGE_SHA_TAG: sha-${{ github.sha }}
+jobs:
+  promote-image:
+    name: Promote image (retag, no rebuild)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - name: Add release tag to the already-built image
+        run: |
+          REPO="${{ vars.ECR_REPOSITORY_URL }}"; REPO="${REPO#*/}"
+          MANIFEST=$(aws ecr batch-get-image --repository-name "$REPO" \
+            --image-ids imageTag="$IMAGE_SHA_TAG" --query 'images[0].imageManifest' --output text)
+          [ "$MANIFEST" != "None" ] || { echo "image $IMAGE_SHA_TAG not found - did the Backend workflow run on this commit?"; exit 1; }
+          aws ecr put-image --repository-name "$REPO" --image-tag "$TAG" --image-manifest "$MANIFEST"
+
+  gitops-pr:
+    name: Open GitOps PR (backend.image.tag)
+    needs: promote-image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: main}
+      - name: Bump tag in values-prod.yaml
+        run: yq -i '.backend.image.tag = strenv(TAG)' deploy/helm/taskboard/values-prod.yaml
+      - uses: peter-evans/create-pull-request@v7   # TODO pin SHA
+        with:
+          branch: release/${{ github.event.release.tag_name }}
+          commit-message: "deploy: backend ${{ github.event.release.tag_name }}"
+          title: "Deploy backend ${{ github.event.release.tag_name }}"
+          body: "Merging this PR = deployment approval. Argo CD will sync the change."
+          add-paths: deploy/helm/taskboard/values-prod.yaml
+
+  deploy-frontend:
+    name: Deploy frontend (S3 + CloudFront)
+    runs-on: ubuntu-latest
+    environment: production              # required reviewer; shows in Deployments
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: "${{ github.sha }}"}
+      - uses: actions/setup-node@v4
+        with: {node-version: 22, cache: npm, cache-dependency-path: app/frontend/package-lock.json}
+      - name: Build
+        working-directory: app/frontend
+        env: {NEXT_PUBLIC_APP_VERSION: "${{ github.event.release.tag_name }}"}
+        run: npm ci && npm run build
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - name: Upload to S3
+        working-directory: app/frontend
+        run: |
+          B="s3://${{ vars.FRONTEND_BUCKET }}"
+          aws s3 sync out/_next "$B/_next" --cache-control "public,max-age=31536000,immutable"
+          aws s3 sync out "$B" --exclude "_next/*" --delete --cache-control "no-cache"
+      - name: Invalidate CloudFront
+        run: aws cloudfront create-invalidation --distribution-id "${{ vars.CLOUDFRONT_DISTRIBUTION_ID }}" --paths "/*"
+      - run: echo "Live at ${{ vars.APP_URL }}" >> "$GITHUB_STEP_SUMMARY"

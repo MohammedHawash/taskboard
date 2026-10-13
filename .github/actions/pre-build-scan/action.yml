@@ -1,0 +1,68 @@
+name: pre-build-scan
+description: Secrets (Gitleaks, TruffleHog), Trivy fs (vuln/secret/misconfig) and SonarQube Cloud quality gate
+inputs:
+  scan-path:        {description: Path for Trivy fs, default: "."}
+  sonar-enabled:    {description: Run SonarQube scan, default: "true"}
+  sonar-token:      {description: SonarQube Cloud token, required: false, default: ""}
+  sonar-host-url:   {description: SonarQube host, default: "https://sonarcloud.io"}
+  sonar-organization: {description: SonarQube Cloud organization key, required: false, default: ""}
+  sonar-project-key:  {description: Project key, required: false, default: ""}
+  sonar-sources:    {description: Sources dir, default: "."}
+runs:
+  using: composite
+  steps:
+    # NOTE: callers must checkout with fetch-depth: 0 (secret scanners read commits)
+    # TODO: pin every third-party action below to a full 40-char commit SHA (keep the version as a comment)
+    - name: Gitleaks
+      uses: gitleaks/gitleaks-action@v2   # TODO pin SHA
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+        GITLEAKS_ENABLE_COMMENTS: "false"
+
+    - name: TruffleHog
+      uses: trufflesecurity/trufflehog@v3.99.2   # TODO pin SHA
+      with:
+        base: ${{ github.event.pull_request.base.sha || github.event.before }}
+        head: ${{ github.event.pull_request.head.sha || github.sha }}
+        extra_args: --results=verified,unknown
+
+    - name: Trivy fs (dependencies, secrets, misconfig)
+      uses: aquasecurity/trivy-action@v0.36.0   # TODO pin SHA (see March 2026 incident)
+      with:
+        scan-type: fs
+        scan-ref: ${{ inputs.scan-path }}
+        scanners: vuln,secret,misconfig
+        severity: HIGH,CRITICAL
+        ignore-unfixed: true
+        exit-code: "1"
+        format: table
+        output: trivy-fs-report.txt
+        # .trivyignore at repo root is picked up automatically
+
+    - name: Show Trivy report
+      if: always()
+      shell: bash
+      run: cat trivy-fs-report.txt 2>/dev/null || true
+
+    - name: SonarQube scan + quality gate
+      if: inputs.sonar-enabled == 'true'
+      uses: SonarSource/sonarqube-scan-action@v5   # TODO pin SHA
+      env:
+        SONAR_TOKEN: ${{ inputs.sonar-token }}
+        SONAR_HOST_URL: ${{ inputs.sonar-host-url }}
+      with:
+        projectBaseDir: ${{ inputs.sonar-sources }}
+        args: >
+          -Dsonar.organization=${{ inputs.sonar-organization }}
+          -Dsonar.projectKey=${{ inputs.sonar-project-key }}
+          -Dsonar.qualitygate.wait=true
+
+    - name: Upload scan reports
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: pre-build-scan-${{ github.job }}
+        path: |
+          trivy-fs-report.txt
+          results.sarif
+        if-no-files-found: ignore

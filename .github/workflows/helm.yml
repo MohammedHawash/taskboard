@@ -1,0 +1,26 @@
+name: Helm
+on:
+  pull_request:
+  push:
+    branches: [main]
+    paths: ["deploy/**", "gitops/**", ".github/**"]
+permissions:
+  contents: read
+jobs:
+  helm:
+    name: Helm lint, template, scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - uses: azure/setup-helm@v4
+      - name: Lint (local + prod values)
+        run: |
+          helm lint deploy/helm/taskboard -f deploy/helm/taskboard/values-local.yaml
+          helm lint deploy/helm/taskboard -f deploy/helm/taskboard/values-prod.yaml
+      - name: Template
+        run: |
+          helm template taskboard deploy/helm/taskboard -f deploy/helm/taskboard/values-local.yaml > /dev/null
+          helm template taskboard deploy/helm/taskboard -f deploy/helm/taskboard/values-prod.yaml > /dev/null
+      - uses: ./.github/actions/pre-build-scan
+        with: {scan-path: deploy/helm/taskboard, sonar-enabled: "false"}
