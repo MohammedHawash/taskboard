@@ -1,0 +1,2 @@
+github_repository = "MohammedHawash/taskboard"
+state_bucket_name = "taskboard-tfstate-hawash123456789-eu-west-1"
