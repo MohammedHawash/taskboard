@@ -10,6 +10,7 @@ def test_ready(client):
     assert response.json() == {"status": "ready"}
 
 
+
 def test_metrics(client):
     client.get("/api/health")
     response = client.get("/metrics")
