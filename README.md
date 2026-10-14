@@ -55,3 +55,18 @@ Rollback = `git revert` of the deployment commit.
 - **Single NAT gateway / public EKS endpoint**: cost. Real company: NAT per AZ, private endpoint + VPN/SSM.
 - **GitOps PR as deployment approval**: auditable, rollback by revert, CI never holds cluster credentials.
 - **Accepted scanner findings** are listed with reasons in `.trivyignore`.
+
+## Decisions & Trade-offs
+
+### Public ALB (Intentional Design Decision)
+
+The Application Load Balancer is intentionally configured with `internal = false` to support the project's CloudFront-based architecture.
+
+To restrict access to the origin:
+- Allow inbound HTTP traffic only from the CloudFront origin-facing managed prefix list.
+- Use the `X-Origin-Verify` header to verify requests before forwarding them to the backend.
+- Return HTTP 403 Forbidden for requests that do not match the origin verification rule.
+
+**Trade-off:** The ALB remains internet-facing, but access is restricted through network rules and origin verification.
+
+**Stretch Goal:** Evaluate CloudFront VPC origins to use an internal ALB in a future iteration.
