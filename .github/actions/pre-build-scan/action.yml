@@ -53,8 +53,6 @@ runs:
       with:
         projectBaseDir: ${{ inputs.sonar-sources }}
         args: >
-          -Dsonar.organization=${{ inputs.sonar-organization }}
-          -Dsonar.projectKey=${{ inputs.sonar-project-key }}
           -Dsonar.qualitygate.wait=true
 
     - name: Upload scan reports

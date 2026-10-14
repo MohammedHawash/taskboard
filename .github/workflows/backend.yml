@@ -39,8 +39,6 @@ jobs:
         with:
           scan-path: app/backend
           sonar-token: ${{ secrets.SONAR_TOKEN }}
-          sonar-organization: ${{ vars.SONAR_ORGANIZATION }}
-          sonar-project-key: ${{ vars.SONAR_ORGANIZATION }}_taskboard-backend
           sonar-sources: app/backend
       - name: Build image
         run: docker build --pull --build-arg APP_VERSION=sha-${{ github.sha }} -t taskboard-backend:ci app/backend
