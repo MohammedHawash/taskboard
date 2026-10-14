@@ -1,2 +1,0 @@
-github_repository = "YOUR_USER/taskboard"
-state_bucket_name = "taskboard-tfstate-<account-id>-eu-west-1"
