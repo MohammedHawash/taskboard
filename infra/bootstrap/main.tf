@@ -52,10 +52,10 @@ resource "aws_iam_openid_connect_provider" "github" {
 module "infra_role" {
   source = "../modules/github-oidc-role"
 
-  name                = "taskboard-github-infra"
-  oidc_provider_arn   = aws_iam_openid_connect_provider.github.arn
-  github_repository   = var.github_repository
-  subs                = ["pull_request", "ref:refs/heads/main", "environment:infrastructure"]
+  name              = "taskboard-github-infra"
+  oidc_provider_arn = aws_iam_openid_connect_provider.github.arn
+  github_repository = var.github_repository
+  subs              = ["pull_request", "ref:refs/heads/main", "environment:infrastructure"]
   # Terraform creates VPC/EKS/IAM/... -> broad rights. Trade-off documented in README.
   managed_policy_arns = ["arn:aws:iam::aws:policy/AdministratorAccess"]
 }
