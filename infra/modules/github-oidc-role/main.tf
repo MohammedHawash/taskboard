@@ -15,6 +15,11 @@ variable "managed_policy_arns" {
   type    = list(string)
   default = []
 }
+variable "create_inline_policy" {
+  type        = bool
+  default     = false
+  description = "Set to true when inline_policy_json is passed (must be known at plan time, unlike the policy itself)"
+}
 variable "inline_policy_json" {
   type    = string
   default = null
@@ -52,7 +57,7 @@ resource "aws_iam_role_policy_attachment" "managed" {
 }
 
 resource "aws_iam_role_policy" "inline" {
-  count  = var.inline_policy_json == null ? 0 : 1
+  count  = var.create_inline_policy ? 1 : 0
   name   = "${var.name}-inline"
   role   = aws_iam_role.this.id
   policy = var.inline_policy_json
